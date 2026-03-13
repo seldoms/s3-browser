@@ -2,6 +2,8 @@
 
 一个给 macOS 用的轻量对象存储客户端。
 
+当前发布版本仅支持 Apple Silicon Mac，也就是 M1 / M2 / M3 / M4 系列芯片设备。
+
 它不想做得很重，也不想把人困在复杂的菜单里。这个版本把注意力放在最常用、最能立刻解决问题的几件事上：浏览桶、复制文件直链、复制下载命令、生成 OBS 文件夹下载命令，以及自动分片并发上传。
 
 ## 适合谁
@@ -10,6 +12,7 @@
 - 需要把下载命令直接发给同事的人
 - 用华为云 OBS，想把 `obsutil` 配置和下载流程交给工友的人
 - 想在 mac 上有个比网页控制台更顺手的小工具的人
+- 正在使用 Apple Silicon Mac 的人
 
 ## 现在能做什么
 
@@ -86,6 +89,12 @@ npm install
 npm run electron:dev
 ```
 
+注意：
+
+- 当前仓库默认打包的是 `arm64` 版本
+- 也就是只面向 Apple Silicon Mac
+- Intel Mac 暂不在这一版支持范围内
+
 ## 构建 mac 安装包
 
 ```bash
@@ -94,8 +103,10 @@ npm run electron:build
 
 产物位于 `dist/`：
 
-- `.dmg`
-- `.zip`
+- `S3 Browser-0.1.0-arm64.dmg`
+- `S3 Browser-0.1.0-arm64-mac.zip`
+
+这两个安装包都面向 Apple Silicon Mac。
 
 ## 技术栈
 
