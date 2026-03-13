@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S3 原始数据查看器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #4ec9b0;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+
+        .section {
+            background: #252526;
+            border: 1px solid #3e3e42;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .section h2 {
+            color: #569cd6;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+
+        button {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            font-family: inherit;
+        }
+
+        button:hover {
+            background: #1177bb;
+        }
+
+        button.danger {
+            background: #c72e0f;
+        }
+
+        button.danger:hover {
+            background: #e03e0f;
+        }
+
+        pre {
+            background: #1e1e1e;
+            border: 1px solid #3e3e42;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.5;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .key {
+            color: #9cdcfe;
+        }
+
+        .string {
+            color: #ce9178;
+        }
+
+        .number {
+            color: #b5cea8;
+        }
+
+        .boolean {
+            color: #569cd6;
+        }
+
+        .null {
+            color: #569cd6;
+        }
+
+        .status {
+            padding: 10px 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .status.success {
+            background: #1a3d1a;
+            border: 1px solid #4ec9b0;
+            color: #4ec9b0;
+        }
+
+        .status.error {
+            background: #3d1a1a;
+            border: 1px solid #f48771;
+            color: #f48771;
+        }
+
+        .status.info {
+            background: #1a2d3d;
+            border: 1px solid #569cd6;
+            color: #569cd6;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 1200px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .highlight {
+            background: #3d3d1a;
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: #dcdcaa;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🔬 S3 原始数据查看器</h1>
+
+        <div class="section">
+            <h2>📋 当前凭证</h2>
+            <div id="credsInfo"></div>
+        </div>
+
+        <div class="section">
+            <h2>🧪 测试操作</h2>
+            <button onclick="testRawAPI()">📡 获取原始 API 响应</button>
+            <button onclick="testWithConsole()">🖥️ 在控制台查看详细日志</button>
+            <button onclick="location.reload()" class="danger">🔄 刷新页面</button>
+        </div>
+
+        <div class="grid">
+            <div class="section">
+                <h2>📤 请求数据</h2>
+                <div id="requestData"></div>
+            </div>
+
+            <div class="section">
+                <h2>📥 响应数据</h2>
+                <div id="responseData"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🔍 数据分析</h2>
+            <div id="analysis"></div>
+        </div>
+
+        <div class="section">
+            <h2>💡 诊断建议</h2>
+            <div id="suggestions"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentCreds = null;
+
+        function syntaxHighlight(json) {
+            if (typeof json !== 'string') {
+                json = JSON.stringify(json, null, 2);
+            }
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                let cls = 'number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'key';
+                    } else {
+                        cls = 'string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'null';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+        }
+
+        function displayCreds() {
+            const saved = localStorage.getItem("s3_creds");
+            const credsDiv = document.getElementById('credsInfo');
+
+            if (!saved) {
+                credsDiv.innerHTML = '<div class="status error">❌ 未找到保存的凭证</div>';
+                return null;
+            }
+
+            try {
+                const creds = JSON.parse(saved);
+                currentCreds = creds;
+                credsDiv.innerHTML = '<pre>' + syntaxHighlight(creds) + '</pre>';
+                return creds;
+            } catch (err) {
+                credsDiv.innerHTML = '<div class="status error">❌ 凭证解析失败: ' + err.message + '</div>';
+                return null;
+            }
+        }
+
+        async function testRawAPI() {
+            const creds = currentCreds || displayCreds();
+            if (!creds) {
+                alert('缺少凭证');
+                return;
+            }
+
+            const requestDiv = document.getElementById('requestData');
+            const responseDiv = document.getElementById('responseData');
+            const analysisDiv = document.getElementById('analysis');
+            const suggestionsDiv = document.getElementById('suggestions');
+
+            const requestPayload = {
+                credentials: creds,
+                action: 'listBuckets',
+                params: {}
+            };
+
+            requestDiv.innerHTML = '<pre>' + syntaxHighlight(requestPayload) + '</pre>';
+            responseDiv.innerHTML = '<div class="status info">⏳ 正在请求...</div>';
+            analysisDiv.innerHTML = '';
+            suggestionsDiv.innerHTML = '';
+
+            try {
+                console.log('========== 开始 API 请求 ==========');
+                console.log('请求 URL:', '/api/s3');
+                console.log('请求方法:', 'POST');
+                console.log('请求载荷:', requestPayload);
+
+                const startTime = Date.now();
+                const response = await fetch('/api/s3', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestPayload)
+                });
+                const duration = Date.now() - startTime;
+
+                console.log('响应状态:', response.status, response.statusText);
+                console.log('响应耗时:', duration + 'ms');
+                console.log('响应头:', Object.fromEntries(response.headers.entries()));
+
+                const rawText = await response.text();
+                console.log('原始响应文本:', rawText);
+
+                let data;
+                try {
+                    data = JSON.parse(rawText);
+                    console.log('解析后的 JSON:', data);
+                } catch (e) {
+                    console.error('JSON 解析失败:', e);
+                    responseDiv.innerHTML = `
+                        <div class="status error">❌ JSON 解析失败</div>
+                        <pre>${rawText}</pre>
+                    `;
+                    return;
+                }
+
+                responseDiv.innerHTML = '<pre>' + syntaxHighlight(data) + '</pre>';
+
+                // 分析数据
+                let analysis = '<div class="status info">📊 数据分析结果</div>';
+                analysis += '<ul style="line-height: 2; margin-left: 20px;">';
+                analysis += '<li>响应状态: <span class="highlight">' + response.status + '</span></li>';
+                analysis += '<li>响应耗时: <span class="highlight">' + duration + 'ms</span></li>';
+                analysis += '<li>是否有错误: <span class="highlight">' + (data.error ? '是 - ' + data.error : '否') + '</span></li>';
+                analysis += '<li>buckets 字段存在: <span class="highlight">' + ('buckets' in data ? '是' : '否') + '</span></li>';
+
+                if ('buckets' in data) {
+                    analysis += '<li>buckets 类型: <span class="highlight">' + (typeof data.buckets) + '</span></li>';
+                    analysis += '<li>buckets 是数组: <span class="highlight">' + (Array.isArray(data.buckets) ? '是' : '否') + '</span></li>';
+
+                    if (Array.isArray(data.buckets)) {
+                        analysis += '<li>buckets 长度: <span class="highlight">' + data.buckets.length + '</span></li>';
+
+                        if (data.buckets.length > 0) {
+                            analysis += '<li>第一个桶: <span class="highlight">' + JSON.stringify(data.buckets[0]) + '</span></li>';
+                        }
+                    } else if (data.buckets === null) {
+                        analysis += '<li>⚠️ buckets 为 null</li>';
+                    } else if (data.buckets === undefined) {
+                        analysis += '<li>⚠️ buckets 为 undefined</li>';
+                    }
+                }
+
+                analysis += '</ul>';
+                analysisDiv.innerHTML = analysis;
+
+                // 生成建议
+                let suggestions = '';
+
+                if (data.error) {
+                    suggestions += '<div class="status error">❌ API 返回错误: ' + data.error + '</div>';
+                    suggestions += '<p>请检查凭证配置和网络连接。</p>';
+                } else if (!('buckets' in data)) {
+                    suggestions += '<div class="status error">❌ 响应中没有 buckets 字段</div>';
+                    suggestions += '<p>这可能是 API 实现问题,请检查服务器日志。</p>';
+                } else if (data.buckets === null || data.buckets === undefined) {
+                    suggestions += '<div class="status error">❌ buckets 字段为 null 或 undefined</div>';
+                    suggestions += '<p>S3 API 可能返回了空值,这通常表示:</p>';
+                    suggestions += '<ul style="margin-left: 20px; line-height: 2;"><li>该账户下确实没有桶</li><li>凭证没有 ListBuckets 权限</li></ul>';
+                } else if (!Array.isArray(data.buckets)) {
+                    suggestions += '<div class="status error">❌ buckets 不是数组</div>';
+                    suggestions += '<p>数据类型: ' + (typeof data.buckets) + '</p>';
+                    suggestions += '<p>这是数据格式问题,请检查 API 实现。</p>';
+                } else if (data.buckets.length === 0) {
+                    suggestions += '<div class="status info">ℹ️ buckets 是空数组</div>';
+                    suggestions += '<p><strong>这说明 API 工作正常,但该账户下没有存储桶。</strong></p>';
+                    suggestions += '<p>可能的原因:</p>';
+                    suggestions += '<ul style="margin-left: 20px; line-height: 2;">';
+                    suggestions += '<li>✅ 全新账户,从未创建过桶</li>';
+                    suggestions += '<li>✅ Region 配置错误,桶在其他区域</li>';
+                    suggestions += '<li>✅ 凭证权限受限,只能访问特定桶</li>';
+                    suggestions += '</ul>';
+                    suggestions += '<p><strong>解决方案:</strong></p>';
+                    suggestions += '<ul style="margin-left: 20px; line-height: 2;">';
+                    suggestions += '<li>🎯 在应用中创建一个测试桶</li>';
+                    suggestions += '<li>🎯 检查并更正 Region 配置</li>';
+                    suggestions += '<li>🎯 使用"手动测试桶访问"功能测试已知桶</li>';
+                    suggestions += '</ul>';
+                } else {
+                    suggestions += '<div class="status success">✅ 成功获取到 ' + data.buckets.length + ' 个桶</div>';
+                    suggestions += '<p>桶列表:</p>';
+                    suggestions += '<ul style="margin-left: 20px; line-height: 2;">';
+                    data.buckets.forEach(bucket => {
+                        suggestions += '<li>🪣 ' + (bucket.Name || JSON.stringify(bucket)) + '</li>';
+                    });
+                    suggestions += '</ul>';
+                    suggestions += '<p><strong>如果 Explorer 页面看不到这些桶,可能是前端渲染问题。</strong></p>';
+                }
+
+                suggestionsDiv.innerHTML = suggestions;
+
+                console.log('========== API 请求完成 ==========');
+
+            } catch (err) {
+                console.error('请求失败:', err);
+                responseDiv.innerHTML = `
+                    <div class="status error">❌ 请求失败</div>
+                    <pre>${err.message}\n${err.stack}</pre>
+                `;
+                suggestionsDiv.innerHTML = `
+                    <div class="status error">网络错误</div>
+                    <p>无法连接到 API 服务器,请检查:</p>
+                    <ul style="margin-left: 20px; line-height: 2;">
+                        <li>开发服务器是否正在运行</li>
+                        <li>端口 3001 是否可访问</li>
+                        <li>浏览器控制台是否有其他错误</li>
+                    </ul>
+                `;
+            }
+        }
+
+        function testWithConsole() {
+            console.clear();
+            console.log('%c🔬 S3 调试模式', 'font-size: 20px; color: #4ec9b0; font-weight: bold;');
+            console.log('%c请查看下方的详细日志', 'font-size: 14px; color: #569cd6;');
+            testRawAPI();
+        }
+
+        // 页面加载时显示凭证
+        displayCreds();
+    </script>
+</body>
+
+</html>
