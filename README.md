@@ -1,81 +1,111 @@
-# S3 Browser - 使用指南
+# S3 Browser
 
-## 快速开始
+一个给 macOS 用的轻量对象存储客户端。
 
-### 启动桌面应用（推荐）
+它不想做得很重，也不想把人困在复杂的菜单里。这个版本把注意力放在最常用、最能立刻解决问题的几件事上：浏览桶、复制文件直链、复制下载命令、生成 OBS 文件夹下载命令，以及自动分片并发上传。
+
+## 适合谁
+
+- 日常要从对象存储里翻文件的人
+- 需要把下载命令直接发给同事的人
+- 用华为云 OBS，想把 `obsutil` 配置和下载流程交给工友的人
+- 想在 mac 上有个比网页控制台更顺手的小工具的人
+
+## 现在能做什么
+
+- 浏览存储桶和目录
+- 文件：复制直链
+- 文件：复制 `curl` 下载命令
+- 文件夹：复制 `obsutil` 下载命令
+- 上传：自动分片并发
+- 一键复制 OBS 安装配置命令
+- 导出 OBS 配置文件，发给别人直接用
+
+## 为什么做成这样
+
+很多对象存储工具的问题，不是功能不够，而是离真实工作流差半步。
+
+有时候你不是想“管理云资源”，你只是想：
+
+- 把一个文件链接发出去
+- 给同事一条能直接跑的下载命令
+- 把一个目录整包拉到本地
+- 快一点把大文件传上去
+
+所以这个项目尽量把动作做短，把界面做平，把最常用的事情放在一眼能看到、一下能点到的位置。
+
+## 使用方式
+
+### 连接
+
+在登录页填入：
+
+- `Endpoint`
+- `Region`
+- `Access Key ID`
+- `Secret Access Key`
+
+华为云 OBS 示例：
 
 ```bash
-cd /Users/seldoms/sobey/ai/s3
+Endpoint: https://obs.cn-north-4.myhuaweicloud.com
+Region:   cn-north-4
+```
+
+### 文件操作
+
+- 选中文件后，可直接复制直链或复制下载命令
+- 右键文件也可以执行同样动作
+
+### 文件夹操作
+
+- 右键文件夹，可复制 OBS 下载命令
+- 生成的本地目标路径会保留占位提示，避免误下载到当前目录
+
+示例：
+
+```bash
+obsutil cp 'obs://bucket-name/folder/' '/请修改为本地路径/当前文件夹名-folder/' -f -r -j=8
+```
+
+### OBS 客户端协作
+
+工具条里提供了三件事：
+
+- `复制 OBS 安装配置命令`
+- `导出 OBS 配置文件`
+- `选择 OBS 配置文件`
+
+如果你自己用，通常复制安装配置命令就够了。  
+如果你要发给同事或工友，直接导出配置文件更省事。
+
+## 本地开发
+
+```bash
+npm install
 npm run electron:dev
 ```
 
-这将打开一个独立的桌面窗口，无需浏览器。
-
-### 启动 Web 版本
-
-```bash
-cd /Users/seldoms/sobey/ai/s3
-npm run dev
-```
-
-然后访问 `http://localhost:3001`
-
----
-
-## 连接到您的 S3 服务
-
-在登录页面输入以下信息：
-
-### 华为云 OBS 示例
-- **Endpoint**: `https://obs.cn-north-4.myhuaweicloud.com`
-- **Region**: `cn-north-4`
-- **Access Key**: 您的访问密钥 ID
-- **Secret Key**: 您的私有访问密钥
-
-### AWS S3 示例
-- **Endpoint**: `https://s3.amazonaws.com`
-- **Region**: `us-east-1`（或您的区域）
-- **Access Key**: 您的 AWS Access Key
-- **Secret Key**: 您的 AWS Secret Key
-
-### MinIO 示例
-- **Endpoint**: `http://localhost:9000`（或您的 MinIO 地址）
-- **Region**: `us-east-1`
-- **Access Key**: MinIO 用户名
-- **Secret Key**: MinIO 密码
-
----
-
-## 主要功能
-
-### 📦 浏览存储桶
-- 左侧边栏显示所有存储桶
-- 点击任意存储桶查看内容
-
-### 📁 文件管理
-- **面包屑导航**：点击路径快速跳转
-- **视图切换**：列表视图 ⇄ 网格视图
-- **文件夹导航**：双击文件夹进入
-- **返回上级**：点击左上角返回按钮
-
-### 📥 下载文件
-- 列表视图：悬停文件，点击下载图标
-- 网格视图：悬停卡片，点击下载按钮
-
----
-
-## 后续打包为独立应用
-
-如果您想生成 `.app` 或 `.dmg` 安装包：
+## 构建 mac 安装包
 
 ```bash
 npm run electron:build
 ```
 
-打包后的应用将位于 `dist/` 目录。
+产物位于 `dist/`：
 
----
+- `.dmg`
+- `.zip`
 
-**项目位置**: `/Users/seldoms/sobey/ai/s3`  
-**技术栈**: Electron + Next.js + React + AWS SDK  
-**状态**: ✅ 已完成并运行中
+## 技术栈
+
+- Electron
+- Next.js
+- React
+- AWS SDK for JavaScript v3
+
+## 一点说明
+
+这个项目不是从模板里堆出来的“全能云盘”，而是围绕真实使用场景一刀一刀收出来的桌面工具。
+
+它现在还不完美，但已经足够直接、足够实用，也足够像一个会被人真正留在 Dock 里的小应用。
