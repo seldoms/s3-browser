@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { callS3Api } from "@/lib/api";
+import { normalizeS3Credentials } from "@/lib/credentials";
 import { S3Credentials } from "@/types/s3";
 
 const EMPTY_CREDENTIALS: S3Credentials = {
@@ -10,6 +11,7 @@ const EMPTY_CREDENTIALS: S3Credentials = {
   secretAccessKey: "",
   endpoint: "",
   region: "",
+  bucketName: "",
 };
 
 const CARD_STYLE = {
@@ -41,7 +43,7 @@ const INPUT_STYLE = {
   outline: "none",
 };
 
-function detectRegion(endpoint: string, currentRegion: string) {
+function detectRegion(endpoint: string) {
   const patterns = [
     /obs\.([a-z0-9-]+)\.myhuaweicloud\.com/i,
     /s3\.([a-z0-9-]+)\.amazonaws\.com/i,
@@ -56,7 +58,33 @@ function detectRegion(endpoint: string, currentRegion: string) {
     }
   }
 
-  return currentRegion;
+  return "";
+}
+
+function navigateTo(router: ReturnType<typeof useRouter>, path: "/" | "/explorer") {
+  router.push(path);
+}
+
+function formatConnectError(error: unknown) {
+  const message = error instanceof Error ? error.message : "未知错误";
+
+  if (/AccessDenied|Access Denied|HTTP:\s*403/i.test(message)) {
+    return "华为 OBS 已收到请求，但当前 AK/SK 没有访问所请求资源的权限。受限账号可填写一个有权限访问的桶名称。";
+  }
+
+  if (/InvalidAccessKeyId/i.test(message)) {
+    return "Access Key ID 无效，请检查 AK 是否完整、是否已停用。";
+  }
+
+  if (/SignatureDoesNotMatch/i.test(message)) {
+    return "签名不匹配，请检查 Secret Access Key、Region 和 Endpoint。";
+  }
+
+  if (/ENOTFOUND|getaddrinfo/i.test(message)) {
+    return "Endpoint 域名无法解析，请检查地址和当前网络 DNS。";
+  }
+
+  return message;
 }
 
 export default function Home() {
@@ -72,7 +100,7 @@ export default function Home() {
     }
 
     try {
-      setCredentials(JSON.parse(savedCredentials));
+      setCredentials({ ...EMPTY_CREDENTIALS, ...JSON.parse(savedCredentials) });
     } catch (parseError) {
       console.error("Failed to parse saved credentials:", parseError);
     }
@@ -86,7 +114,7 @@ export default function Home() {
     setCredentials((prev) => ({
       ...prev,
       endpoint: value,
-      region: detectRegion(value, prev.region),
+      region: detectRegion(value),
     }));
   };
 
@@ -95,14 +123,19 @@ export default function Home() {
     setLoading(true);
     setError("");
 
-    localStorage.setItem("s3_creds", JSON.stringify(credentials));
-
     try {
-      await callS3Api("listBuckets", credentials);
-      router.push("/explorer");
+      const normalizedCredentials = normalizeS3Credentials(credentials);
+      if (normalizedCredentials.bucketName) {
+        await callS3Api("testBucket", normalizedCredentials, {
+          bucket: normalizedCredentials.bucketName,
+        });
+      } else {
+        await callS3Api("listBuckets", normalizedCredentials);
+      }
+      localStorage.setItem("s3_creds", JSON.stringify(normalizedCredentials));
+      navigateTo(router, "/explorer");
     } catch (connectError: unknown) {
-      const message = connectError instanceof Error ? connectError.message : "未知错误";
-      setError(`连接失败：${message}`);
+      setError(`连接失败：${formatConnectError(connectError)}`);
     } finally {
       setLoading(false);
     }
@@ -185,16 +218,15 @@ export default function Home() {
           </div>
 
           <div>
-            <label htmlFor="region" style={FIELD_LABEL_STYLE}>
-              Region
+            <label htmlFor="bucket-name" style={FIELD_LABEL_STYLE}>
+              桶名称（可选）
             </label>
             <input
-              id="region"
+              id="bucket-name"
               type="text"
-              required
-              value={credentials.region}
-              onChange={(event) => updateCredentials("region", event.target.value)}
-              placeholder="cn-north-4"
+              value={credentials.bucketName || ""}
+              onChange={(event) => updateCredentials("bucketName", event.target.value)}
+              placeholder="例如：jyhy；受限账号建议填写"
               style={INPUT_STYLE}
             />
           </div>

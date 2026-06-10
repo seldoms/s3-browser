@@ -43,6 +43,7 @@ export interface S3Credentials {
     secretAccessKey: string;
     endpoint: string;
     region: string;
+    bucketName?: string;
 }
 
 export interface ExplorerFileItem extends S3Object {

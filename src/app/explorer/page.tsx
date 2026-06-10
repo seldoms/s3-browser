@@ -3,6 +3,10 @@
 import { ChangeEvent, MouseEvent, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { callS3Api } from "@/lib/api";
+import {
+  exportObsConfigFile,
+  selectObsConfigFile,
+} from "@/lib/desktop";
 import { FileTable } from "@/components/FileTable";
 import { ToastProvider, useToast } from "@/components/ui/Toast";
 import {
@@ -136,16 +140,8 @@ function isExplorerFileItem(item: ExplorerItem): item is ExplorerFileItem {
   return item.type === "file";
 }
 
-function downloadTextFile(fileName: string, content: string) {
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = objectUrl;
-  anchor.download = fileName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(objectUrl);
+function navigateTo(router: ReturnType<typeof useRouter>, path: "/" | "/explorer") {
+  router.push(path);
 }
 
 export default function ExplorerPage() {
@@ -177,7 +173,7 @@ function ExplorerView() {
   useEffect(() => {
     const savedCredentials = localStorage.getItem("s3_creds");
     if (!savedCredentials) {
-      router.push("/");
+      navigateTo(router, "/");
       return;
     }
 
@@ -186,7 +182,7 @@ function ExplorerView() {
       setObsConfigPath(localStorage.getItem(OBS_CONFIG_PATH_KEY) || "");
     } catch (parseError) {
       console.error("Failed to load explorer credentials:", parseError);
-      router.push("/");
+      navigateTo(router, "/");
     }
   }, [router]);
 
@@ -203,6 +199,13 @@ function ExplorerView() {
 
     setLoading(true);
     try {
+      if (credentials.bucketName) {
+        const bucket = credentials.bucketName;
+        setBuckets([{ Name: bucket, CreationDate: new Date(0) }]);
+        setCurrentBucket(bucket);
+        return;
+      }
+
       const result = await callS3Api("listBuckets", credentials);
       setBuckets(result.buckets || []);
     } catch (error) {
@@ -292,19 +295,14 @@ function ExplorerView() {
   }
 
   async function configureObsConfig() {
-    if (!window.electronAPI?.selectObsConfig) {
-      addToast("当前仅桌面版支持选择 OBS 配置文件", "warning");
-      return;
-    }
-
     try {
-      const result = await window.electronAPI.selectObsConfig();
-      if (result.cancelled || !result.filePath) {
+      const filePath = await selectObsConfigFile();
+      if (!filePath) {
         return;
       }
 
-      localStorage.setItem(OBS_CONFIG_PATH_KEY, result.filePath);
-      setObsConfigPath(result.filePath);
+      localStorage.setItem(OBS_CONFIG_PATH_KEY, filePath);
+      setObsConfigPath(filePath);
       addToast("OBS 配置文件已保存", "success");
     } catch (error) {
       console.error("Failed to pick OBS config:", error);
@@ -355,30 +353,18 @@ function ExplorerView() {
       endpoint: credentials.endpoint,
     });
 
-    if (!window.electronAPI?.exportObsConfig) {
-      downloadTextFile(fileName, configContent);
-      addToast("OBS 配置文件已下载到浏览器默认位置", "success");
-      return;
-    }
-
     try {
-      addToast("正在打开 OBS 配置文件保存窗口", "success");
-      const result = await window.electronAPI.exportObsConfig({
-        fileName,
-        content: configContent,
-      });
-
-      if (result.cancelled || !result.filePath) {
+      const filePath = await exportObsConfigFile(fileName, configContent);
+      if (!filePath) {
         return;
       }
 
-      localStorage.setItem(OBS_CONFIG_PATH_KEY, result.filePath);
-      setObsConfigPath(result.filePath);
+      localStorage.setItem(OBS_CONFIG_PATH_KEY, filePath);
+      setObsConfigPath(filePath);
       addToast("OBS 配置文件已导出", "success");
     } catch (error) {
-      console.error("Failed to export obs config:", error);
-      downloadTextFile(fileName, configContent);
-      addToast("保存窗口异常，已改为直接下载 OBS 配置文件", "warning");
+      console.error("Failed to export OBS config:", error);
+      addToast("导出 OBS 配置文件失败", "error");
     }
   }
 
@@ -394,29 +380,6 @@ function ExplorerView() {
     }
 
     try {
-      if (window.electronAPI) {
-        const result = await callS3Api("startDownload", credentials, {
-          bucket: currentBucket,
-          key,
-          fileName: getFileNameFromKey(key),
-        });
-
-        if (result.transferId && window.addTransfer) {
-          window.addTransfer({
-            transferId: result.transferId,
-            type: "download",
-            fileName: getFileNameFromKey(key),
-            status: "downloading",
-            progress: 0,
-            speed: 0,
-            totalBytes: 0,
-            bucket: currentBucket,
-            key,
-          });
-        }
-        return;
-      }
-
       const { url } = await callS3Api("getDownloadUrl", credentials, { bucket: currentBucket, key });
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (error) {
@@ -430,37 +393,7 @@ function ExplorerView() {
       return;
     }
 
-    try {
-      if (window.electronAPI) {
-        const result = await callS3Api("startUpload", credentials, {
-          bucket: currentBucket,
-          prefix: path,
-        });
-
-        if (result.transfers && window.addTransfer) {
-          result.transfers.forEach((transfer: { transferId: string; fileName: string }) => {
-            window.addTransfer?.({
-              transferId: transfer.transferId,
-              type: "upload",
-              fileName: transfer.fileName,
-              status: "uploading",
-              progress: 0,
-              speed: 0,
-              totalBytes: 0,
-              bucket: currentBucket,
-              key: `${path}${transfer.fileName}`,
-            });
-          });
-        }
-
-        return;
-      }
-
-      document.getElementById("web-upload-input")?.click();
-    } catch (error) {
-      console.error("Failed to start upload:", error);
-      addToast("启动上传失败", "error");
-    }
+    document.getElementById("web-upload-input")?.click();
   }
 
   async function handleWebUpload(event: ChangeEvent<HTMLInputElement>) {

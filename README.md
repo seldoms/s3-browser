@@ -1,122 +1,98 @@
 # S3 Browser
 
-一个给 macOS 用的轻量对象存储客户端。
+![S3 Browser](src-tauri/icons/128x128@2x.png)
 
-当前发布版本仅支持 Apple Silicon Mac，也就是 M1 / M2 / M3 / M4 系列芯片设备。
+**小身材，直连云端。**
 
-它不想做得很重，也不想把人困在复杂的菜单里。这个版本把注意力放在最常用、最能立刻解决问题的几件事上：浏览桶、复制文件直链、复制下载命令、生成 OBS 文件夹下载命令，以及自动分片并发上传。
+一个用 Tauri 2 + Rust 打造的轻量 macOS S3 / 华为云 OBS 客户端。
 
-## 适合谁
+没有内置浏览器的沉重行李，没有绕一圈的服务端中转，AK/SK 只在你的电脑上干活。
 
-- 日常要从对象存储里翻文件的人
-- 需要把下载命令直接发给同事的人
-- 用华为云 OBS，想把 `obsutil` 配置和下载流程交给工友的人
-- 想在 mac 上有个比网页控制台更顺手的小工具的人
-- 正在使用 Apple Silicon Mac 的人
+> Electron 下班了。现在轮到 Rust 值夜班。
 
-## 现在能做什么
+## 它能干什么
 
-- 浏览存储桶和目录
-- 文件：复制直链
-- 文件：复制 `curl` 下载命令
-- 文件夹：复制 `obsutil` 下载命令
-- 上传：自动分片并发
-- 一键复制 OBS 安装配置命令
-- 导出 OBS 配置文件，发给别人直接用
+- 连接 AWS S3、华为云 OBS 及其他 S3 兼容存储
+- 根据 Endpoint 自动识别 Region，不再单独填写机房
+- 支持指定桶登录，受限 AK 没有 `ListBuckets` 权限也能用
+- 浏览桶、目录和对象
+- 上传、下载、删除文件
+- 复制预签名直链和 `curl` 下载命令
+- 生成 `obsutil` 文件夹下载命令
+- 导入、导出 OBS 配置文件
 
-## 为什么做成这样
+## 为什么重写
 
-很多对象存储工具的问题，不是功能不够，而是离真实工作流差半步。
+旧版本能用，但 Electron 为一个 S3 客户端带来的体积有点过于豪迈。
 
-有时候你不是想“管理云资源”，你只是想：
+现在：
 
-- 把一个文件链接发出去
-- 给同事一条能直接跑的下载命令
-- 把一个目录整包拉到本地
-- 快一点把大文件传上去
+- 前端继续使用 React + Next.js，界面开发不受罪
+- 桌面壳换成 Tauri，不再捆绑整套 Chromium
+- S3 请求、签名和文件操作交给 Rust
+- 发布包从“大块头”变成更像工具该有的尺寸
 
-所以这个项目尽量把动作做短，把界面做平，把最常用的事情放在一眼能看到、一下能点到的位置。
+简单说：该有的都有，不该胖的地方瘦下来了。
 
-## 使用方式
+## 华为云 OBS
 
-### 连接
+Endpoint 可以直接填写：
 
-在登录页填入：
-
-- `Endpoint`
-- `Region`
-- `Access Key ID`
-- `Secret Access Key`
-
-华为云 OBS 示例：
-
-```bash
-Endpoint: https://obs.cn-north-4.myhuaweicloud.com
-Region:   cn-north-4
+```text
+obs.cn-east-3.myhuaweicloud.com
 ```
 
-### 文件操作
+Region 会自动识别为 `cn-east-3`。
 
-- 选中文件后，可直接复制直链或复制下载命令
-- 右键文件也可以执行同样动作
-
-### 文件夹操作
-
-- 右键文件夹，可复制 OBS 下载命令
-- 生成的本地目标路径会保留占位提示，避免误下载到当前目录
-
-示例：
-
-```bash
-obsutil cp 'obs://bucket-name/folder/' '/请修改为本地路径/当前文件夹名-folder/' -f -r -j=8
-```
-
-### OBS 客户端协作
-
-工具条里提供了三件事：
-
-- `复制 OBS 安装配置命令`
-- `导出 OBS 配置文件`
-- `选择 OBS 配置文件`
-
-如果你自己用，通常复制安装配置命令就够了。  
-如果你要发给同事或工友，直接导出配置文件更省事。
-
-## 本地开发
-
-```bash
-npm install
-npm run electron:dev
-```
-
-注意：
-
-- 当前仓库默认打包的是 `arm64` 版本
-- 也就是只面向 Apple Silicon Mac
-- Intel Mac 暂不在这一版支持范围内
-
-## 构建 mac 安装包
-
-```bash
-npm run electron:build
-```
-
-产物位于 `dist/`：
-
-- `S3 Browser-0.1.0-arm64.dmg`
-- `S3 Browser-0.1.0-arm64-mac.zip`
-
-这两个安装包都面向 Apple Silicon Mac。
+如果账号没有列出全部桶的权限，在登录页填写一个有权访问的桶名称即可。客户端会直接验证该桶，不再拿 `ListBuckets` 撞权限墙。
 
 ## 技术栈
 
-- Electron
-- Next.js
-- React
-- AWS SDK for JavaScript v3
+| 部分 | 技术 |
+| --- | --- |
+| 桌面框架 | Tauri 2 |
+| 云存储核心 | Rust + AWS SDK for Rust |
+| 界面 | Next.js + React |
+| 系统能力 | Tauri Dialog / File System Plugins |
 
-## 一点说明
+所有云存储请求都由 [`src-tauri/`](src-tauri/) 中的 Rust 后端直接完成。
 
-这个项目不是从模板里堆出来的“全能云盘”，而是围绕真实使用场景一刀一刀收出来的桌面工具。
+## 开发
 
-它现在还不完美，但已经足够直接、足够实用，也足够像一个会被人真正留在 Dock 里的小应用。
+需要 Node.js、npm 和 Rust stable：
+
+```bash
+npm install
+rustup default stable
+npm run tauri:dev
+```
+
+## 检查
+
+```bash
+npm run lint
+npm run build
+cargo check --manifest-path src-tauri/Cargo.toml
+```
+
+## 构建
+
+```bash
+npm run tauri:build
+```
+
+产物位于：
+
+```text
+src-tauri/target/release/bundle/
+```
+
+当前 macOS 发布版本面向 Apple Silicon。
+
+## 安全
+
+- 凭据不会上传到中间服务器
+- 仓库不包含任何真实 AK/SK
+- 构建产物、环境文件和证书默认不会进入 Git
+
+云上的东西很贵，删除按钮也是真的。动手前看清楚对象名。
