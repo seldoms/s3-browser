@@ -1,6 +1,6 @@
 {
   "name": "s3",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A lightweight macOS S3 and OBS desktop client for browsing, link copy, download commands, and fast multipart uploads.",
   "private": true,
   "author": "seldoms",
